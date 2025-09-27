@@ -12,6 +12,7 @@ import torch
 from typing import Any
 
 from trident import Processor 
+from trident.utils import get_device
 from trident.patch_encoder_models import encoder_registry as patch_encoder_registry
 from trident.slide_encoder_models import encoder_registry as slide_encoder_registry
 
@@ -28,7 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='Run Trident')
 
     # Generic arguments 
-    parser.add_argument('--gpu', type=int, default=0, help='GPU index to use for processing tasks.')
+    parser.add_argument('--gpu', type=int, default=None, help='GPU index to use for processing tasks.')
     parser.add_argument('--task', type=str, default='seg', 
                         choices=['seg', 'coords', 'feat', 'all'], 
                         help='Task to run: seg (segmentation), coords (save tissue coordinates), img (save tissue images), feat (extract features).')
@@ -168,7 +169,7 @@ def initialize_processor(args: argparse.Namespace) -> Processor:
     )
 
 
-def run_task(processor: Processor, args: argparse.Namespace) -> None:
+def run_task(processor: Processor, args: argparse.Namespace, device: torch.device) -> None:
     """
     Execute the specified task using the Trident Processor.
 
@@ -203,7 +204,7 @@ def run_task(processor: Processor, args: argparse.Namespace) -> None:
             holes_are_tissue= not args.remove_holes,
             artifact_remover_model=artifact_remover_model,
             batch_size=args.seg_batch_size if args.seg_batch_size is not None else args.batch_size,
-            device=f'cuda:{args.gpu}',
+            device=device,
         )
     elif args.task == 'coords':
         processor.run_patching_job(
@@ -220,7 +221,7 @@ def run_task(processor: Processor, args: argparse.Namespace) -> None:
             processor.run_patch_feature_extraction_job(
                 coords_dir=args.coords_dir or f'{args.mag}x_{args.patch_size}px_{args.overlap}px_overlap',
                 patch_encoder=encoder,
-                device=f'cuda:{args.gpu}',
+                device=device,
                 saveas='h5',
                 batch_limit=args.feat_batch_size if args.feat_batch_size is not None else args.batch_size,
             )
@@ -230,7 +231,7 @@ def run_task(processor: Processor, args: argparse.Namespace) -> None:
             processor.run_slide_feature_extraction_job(
                 slide_encoder=encoder,
                 coords_dir=args.coords_dir or f'{args.mag}x_{args.patch_size}px_{args.overlap}px_overlap',
-                device=f'cuda:{args.gpu}',
+                device=device,
                 saveas='h5',
                 batch_limit=args.feat_batch_size if args.feat_batch_size is not None else args.batch_size,
             )
@@ -248,7 +249,10 @@ def main() -> None:
     """
 
     args = parse_arguments()
-    args.device = f'cuda:{args.gpu}' if torch.cuda.is_available() else 'cpu'
+    device = get_device()
+    if device.type == 'cuda' and args.gpu is not None:
+        device = torch.device(f'cuda:{args.gpu}')
+    print(f"Using device: {device}")
 
     if args.wsi_cache:
         # === Parallel pipeline with caching ===
@@ -285,7 +289,7 @@ def main() -> None:
 
         def run_task_fn(processor: Processor, task_name: str) -> None:
             args.task = task_name
-            run_task(processor, args)
+            run_task(processor, args, device)
 
         producer = Thread(target=batch_producer, args=(
             queue, valid_slides, args.cache_batch_size, args.cache_batch_size, args.wsi_cache
@@ -306,7 +310,7 @@ def main() -> None:
         tasks = ['seg', 'coords', 'feat'] if args.task == 'all' else [args.task]
         for task_name in tasks:
             args.task = task_name
-            run_task(processor, args)
+            run_task(processor, args, device)
 
 
 if __name__ == "__main__":

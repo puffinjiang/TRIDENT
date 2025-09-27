@@ -8,11 +8,13 @@ python run_single_slide.py --slide_path output/wsis/394140.svs --job_dir output/
 """
 import argparse
 import os
+import torch
 
 from trident import load_wsi
 from trident.segmentation_models import segmentation_model_factory
 from trident.patch_encoder_models import encoder_factory
 from trident.patch_encoder_models import encoder_registry as patch_encoder_registry
+from trident.utils import get_device
 
 
 def parse_arguments():
@@ -20,7 +22,7 @@ def parse_arguments():
     Parse command-line arguments for processing a single WSI.
     """
     parser = argparse.ArgumentParser(description="Process a WSI from A to Z.")
-    parser.add_argument("--gpu", type=int, default=0, help="GPU index to use for processing tasks")
+    parser.add_argument("--gpu", type=int, default=None, help="GPU index to use for processing tasks")
     parser.add_argument("--slide_path", type=str, required=True, help="Path to the WSI file to process")
     parser.add_argument("--job_dir", type=str, required=True, help="Directory to store outputs")
     parser.add_argument('--patch_encoder', type=str, default='conch_v15', 
@@ -49,7 +51,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def process_slide(args):
+def process_slide(args, device):
     """
     Process a single WSI by performing segmentation, patch extraction, and feature extraction sequentially.
     """
@@ -76,7 +78,7 @@ def process_slide(args):
         segmentation_model=segmentation_model,
         target_mag=segmentation_model.target_mag,
         job_dir=args.job_dir,
-        device=f"cuda:{args.gpu}",
+        device=device,
         holes_are_tissue=not args.remove_holes
     )
     # additionally remove artifacts for better segmentation.
@@ -111,13 +113,13 @@ def process_slide(args):
     print("Extracting features from patches...")
     encoder = encoder_factory(args.patch_encoder)
     encoder.eval()
-    encoder.to(f"cuda:{args.gpu}")
+    encoder.to(device)
     features_path = features_dir = os.path.join(save_coords, "features_{}".format(args.patch_encoder))
     slide.extract_patch_features(
         patch_encoder=encoder,
         coords_path=os.path.join(save_coords, 'patches', f'{slide.name}_patches.h5'),
         save_features=features_dir,
-        device=f"cuda:{args.gpu}",
+        device=device,
         batch_limit=args.batch_size
     )
     print(f"Feature extraction completed. Results saved to {features_path}")
@@ -125,7 +127,16 @@ def process_slide(args):
 
 def main():
     args = parse_arguments()
-    process_slide(args)
+    
+    # Smartly determine the device
+    device = get_device()
+    # If it's a CUDA device and the user has specified a GPU index, use it
+    if device.type == 'cuda' and args.gpu is not None:
+        device = torch.device(f'cuda:{args.gpu}')
+    
+    print(f"Using device: {device}")
+
+    process_slide(args, device)
 
 
 if __name__ == "__main__":

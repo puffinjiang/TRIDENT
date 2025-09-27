@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from trident.segmentation_models.load import SegmentationModel
+from trident.utils import autocast_fp16
 from trident.wsi_objects.WSIPatcher import *
 from trident.wsi_objects.WSIPatcherDataset import WSIPatcherDataset
 from trident.IO import (
@@ -363,7 +364,7 @@ class WSI:
         return predicted_mask, mpp_reduction_factor
 
     @torch.inference_mode()
-    @torch.autocast(device_type="cuda", dtype=torch.float16)
+    @autocast_fp16()
     def segment_tissue(
         self,
         segmentation_model: SegmentationModel,
@@ -476,7 +477,7 @@ class WSI:
             return gdf_contours
 
     @torch.inference_mode()
-    @torch.autocast(device_type="cuda", dtype=torch.float16)
+    @autocast_fp16()
     def segment_semantic(
         self,
         segmentation_model: SegmentationModel,

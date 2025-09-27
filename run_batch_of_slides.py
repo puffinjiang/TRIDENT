@@ -9,7 +9,6 @@ python run_batch_of_slides.py --task all --wsi_dir output/wsis --job_dir output 
 import os
 import argparse
 import torch
-from typing import Any
 
 from trident import Processor 
 from trident.utils import get_device

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import numpy as np
 from PIL import Image
-from typing import List, Tuple, Union
+from typing import Tuple, Union
 
 from trident.wsi_objects.WSI import WSI, ReadMode
 

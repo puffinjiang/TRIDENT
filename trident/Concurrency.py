@@ -5,6 +5,8 @@ import shutil
 from typing import List, Callable, Any
 from queue import Queue
 
+from trident.utils import empty_cache
+
 
 
 def cache_batch(wsis: List[str], dest_dir: str) -> List[str]:
@@ -120,8 +122,9 @@ def batch_consumer(
             if hasattr(processor, "release"):
                 processor.release()
             del processor
-            gc.collect()
-            torch.cuda.empty_cache()
+            # gc.collect()
+            # torch.cuda.empty_cache()
+            empty_cache()
 
             print(f"[CONSUMER] Clearing cache for batch {batch_id}")
             shutil.rmtree(ssd_batch_dir, ignore_errors=True)
